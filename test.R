@@ -39,10 +39,9 @@ activityImputed$Weekday <- wday(activityImputed$date, label=TRUE)
 isWeekDay <- function(x)
 {
   x <- as.character(x)
-  print(x)
   if (x=="Sun" || x=="Sat")
   {
-    return ("Weekeend")
+    return ("Weekend")
   }
   else
   {
@@ -50,5 +49,22 @@ isWeekDay <- function(x)
   }
 }
 
-activityImputed$Weekend <- lapply(activityImputed$Weekday, isWeekDay)
+activityImputed$Weekend <- sapply(activityImputed$Weekday, isWeekDay)
+
 activityImputed[, 'Weekend'] <- as.factor(activityImputed[, 'Weekend'])
+
+stepsPerIntervalWeekday <- group_by(activityImputed[activityImputed$Weekend=="Weekday",], interval)
+stepsPerIntervalWeekday <- summarise(stepsPerIntervalWeekday, Steps = mean(steps))
+
+stepsPerIntervalWeekend <- group_by(activityImputed[activityImputed$Weekend=="Weekend",], interval)
+stepsPerIntervalWeekend <- summarise(stepsPerIntervalWeekend, Steps = mean(steps))
+
+par(mfrow=c(2,1), mar=c(2,5,4,3))
+plot(stepsPerIntervalWeekend$interval, stepsPerIntervalWeekend$Steps, type="l", xlab="", ylab="", col="deepskyblue", main="Weekend" ,col.main="orange")
+
+plot(stepsPerIntervalWeekday$interval, stepsPerIntervalWeekday$Steps,col="deepskyblue", type="l", xlab="Interval", ylab="",yaxt='n', main="Weekday" ,col.main="orange")
+axis(side = 4)
+mtext("Number of steps", side = 2, adj=3.5, padj=-4)
+
+
+xyplot(Steps ~ interval, data=stepsPerIntervalWeekend, type='l')
