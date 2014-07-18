@@ -1,20 +1,130 @@
 # Reproducible Research: Peer Assessment 1
 
-
 ## Loading and preprocessing the data
 
+Loading the data from the file is straightforward: activity.zip will be unzipped and loaded.
+Additionally, I am supressing the results, which are a bunch of useless warnings.  
+
+```{r loading, warning=FALSE, results="hide", message=FALSE}
+library(Hmisc)
+library(lubridate)
+library(dplyr)
+
+activity <- read.csv(unzip("activity.zip"), stringsAsFactors=FALSE)
+
+# the data is a string, parsing it to a date
+activity$date <- parse_date_time(activity$date, "Ymd")
+
+#for some tasks the NA can be ignored, doing this here
+activiy_withoutNA <- activity[complete.cases(activity),]
+```
 
 
 ## What is mean total number of steps taken per day?
+### Histogram of the total number of steps taken per day
+```{r histogramStepsPerDay, cache=FALSE}
+#grouping by date
+stepsPerDay <- group_by(activiy_withoutNA, date)
+stepsPerDay <- summarise(stepsPerDay, totalSteps = sum(steps))
 
+#creating the histogram
+hist(stepsPerDay$totalSteps, xlab="Total number of steps per day", main="Total number of steps per day", col="orangered1")
+
+```
+
+### Mean / median steps per day
+
+The mean number of the steps taken par day is: **`r sprintf("%.2f", mean(stepsPerDay$totalSteps))`**.
+
+The median number of the steps taken par day is: **`r median(stepsPerDay$totalSteps)`**.  
 
 
 ## What is the average daily activity pattern?
 
+### Histogram of the daily activity pattern
+```{r Assignment2 HistogramInterval, cache=FALSE}
+#Compute the average per interval -> average across all days
+stepsPerInterval <- group_by(activiy_withoutNA, interval)
+stepsPerInterval <- summarise(stepsPerInterval, Steps = mean(steps))
+
+#the lineplot itself
+plot(stepsPerInterval$interval, stepsPerInterval$Steps, type="l", xlab="Interval", ylab="Average number of steps per interval" , main="Average daily activity pattern", col="orangered1")
+
+```
+
+### Interval with the maximum number of steps
+```{r}
+#reordering by the number of steps, for the second result
+stepsPerInterval <- arrange(stepsPerInterval, desc(Steps))
+```
+The Interval no. `r stepsPerInterval[[1, c("interval")]]` has `r stepsPerInterval[[2, c("interval")]]` steps, there is no other interval with more steps.  
 
 
 ## Imputing missing values
+### Number of missing values
+There are `r nrow(activity)` cases in total, but `r nrow(activity) - sum(complete.cases(activity))` are containing missing values. Therefore, only `r sum(complete.cases(activity))` cases are usable without imputation.
 
+###Imputing missing values
+Imputation of missing values is a complex field, where replacing missing values with the mean is normally a bad strategy. Unfortunately, more complex methods are relying on information about reason for missing values and / or additional variables which can help to predict the missing values.
+Since the dataset does not contain such additional information, I will go with the easy method and just use the mean - but that should NOT be done in production code. 
 
+```{r}
+#using the Hmisc impute method for convienience, but a manual replacement would have been easy to do.
+activityImputed<-activity
+activityImputed$steps <- as.numeric(impute(activity$steps, mean))
+
+stepsPerDayImputed <- group_by(activityImputed, date)
+stepsPerDayImputed <- summarise(stepsPerDayImputed, totalSteps = sum(steps))
+```
+The mean number of steps *after* imputation: **`r sprintf("%.2f", mean(stepsPerDayImputed$totalSteps))`**. The standard deviation of the original data: **`r sprintf("%.2f", sd(stepsPerDay$totalSteps))`** and from the imputed data: **`r sprintf("%.2f", sd(stepsPerDayImputed$totalSteps))`**
+
+The median number of the steps *after* imputation: **`r sprintf("%.2f", median(stepsPerDayImputed$totalSteps))`**.  
+
+As you can see, the mean of the imputed data does not change at all - which is not surprising at all, since we are replacing missing values with the mean. Logically, the mean cannot change. But the median is severaly affected and is now equal to the mean, since there are so many mean values inserted in the dataset. Additionally, the standard deviation has dropped quite a bit, since there are so many uniform values in the dataset. All in all, the dataset "looks" better, but it usabillity for statistical analysis has been severely compromised. Better techniques like multiple imputation would have avoided the drop of the standard deviation.
+
+If you take a look at the histogram with imputed values: 
+
+```{r histogramStepsPerDayImputed, cache=FALSE}
+hist(stepsPerDayImputed$totalSteps, xlab="Total number of steps per day", main="Total number of steps per day Imputed", col="orangered1")
+
+```
+
+You will see that the distribution has not dramatically changed, but there are a lot more days in the central column - indicating a highly mesokurtic (peaked) distribution. Thes empahsizes the problem of the mean substitution: the whole distribution gets "smaller" and centers around the peak.
 
 ## Are there differences in activity patterns between weekdays and weekends?
+```{r}
+#compute the weekday
+activityImputed$Weekday <- wday(activityImputed$date, label=TRUE)
+
+isWeekDay <- function(x)
+{
+  x <- as.character(x)
+  if (x=="Sun" || x=="Sat")
+  {
+    return ("Weekend")
+  }
+  else
+  {
+    return ("Weekday")
+  }
+}
+
+activityImputed$Weekend <- sapply(activityImputed$Weekday, isWeekDay)
+
+#compute the factor called Weekend with the labels Weekend and Weekday
+activityImputed[, 'Weekend'] <- as.factor(activityImputed[, 'Weekend'])
+
+stepsPerIntervalWeekday <- group_by(activityImputed[activityImputed$Weekend=="Weekday",], interval)
+stepsPerIntervalWeekday <- summarise(stepsPerIntervalWeekday, Steps = mean(steps))
+
+stepsPerIntervalWeekend <- group_by(activityImputed[activityImputed$Weekend=="Weekend",], interval)
+stepsPerIntervalWeekend <- summarise(stepsPerIntervalWeekend, Steps = mean(steps))
+
+#the plot. Looks somewhat different since I did not use lattice
+par(mfrow=c(2,1), mar=c(2,5,4,3))
+plot(stepsPerIntervalWeekend$interval, stepsPerIntervalWeekend$Steps, type="l", xlab="", ylab="", col="deepskyblue", main="Weekend" ,col.main="orange")
+
+plot(stepsPerIntervalWeekday$interval, stepsPerIntervalWeekday$Steps,col="deepskyblue", type="l", xlab="Interval", ylab="",yaxt='n', main="Weekday" ,col.main="orange")
+axis(side = 4)
+mtext("Number of steps", side = 2, adj=3.5, padj=-4)
+```
